@@ -2,26 +2,34 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.LinkedList;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 
 public class Server implements Runnable{
     private LinkedList<clientHandler> clients;
     private ServerSocket server;
     private boolean isRunning;
+    private ExecutorService threadPool;
+    private int hostSocket;
     public Server(){
         clients = new LinkedList<>();
         isRunning = true;
+        hostSocket = 1234;
     }
     @Override
     public void run(){
         try{
-            server = new ServerSocket(1234); //tworzenie serwera
+            server = new ServerSocket(hostSocket); //tworzenie serwera
+            System.out.println("Serwer dziala na socketcie: " + hostSocket);
             while (isRunning) {
                 Socket newClient = server.accept(); //dodanie uzytkownika do serwera?
-                clients.add(new clientHandler(newClient));
+                clientHandler threadHandler = new clientHandler(newClient);
+                clients.add(threadHandler);
+                threadPool.execute(threadHandler);
             }
 
         } catch (IOException e){
-            //e.printStackTrace();
+            stopServer();
         }
     }
     public void broadcast(String message) {
@@ -50,6 +58,7 @@ public class Server implements Runnable{
         private Socket newClient;
         private BufferedReader reader;
         private PrintWriter writer;
+        private ExecutorService pool;
         public clientHandler(Socket newClient){
             this.newClient = newClient;
         }
@@ -58,11 +67,19 @@ public class Server implements Runnable{
             try{
                 writer = new PrintWriter(newClient.getOutputStream(), true); //dodanie możliwości wysyłania czegoś do klienta
                 reader = new BufferedReader(new InputStreamReader(newClient.getInputStream()));
-                writer.println("Podaj wiadomość: ");
-                System.out.println(reader.readLine());
-                broadcast("HEJ!!!");
+                while (true){
+                    writer.println("Podaj wiadomość: ");
+                    String message = reader.readLine();
+                    System.out.println(message);
+                    if(message.startsWith("quit")){
+                        stopClient();
+                        break;
+                    }
+                    broadcast("HEJ!!!");
+                }
+
             } catch (IOException e){
-                //e.printStackTrace();
+                stopClient();
             }
         }
 
@@ -82,7 +99,11 @@ public class Server implements Runnable{
                 }
             }
         }
-
-
     }
+
+    public static void main(String[] args) {
+        Server server = new Server();
+        server.run();
+    }
+
 }
