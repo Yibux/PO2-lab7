@@ -4,6 +4,7 @@ import java.net.Socket;
 import java.util.LinkedList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server implements Runnable{
     private LinkedList<clientHandler> clients;
@@ -21,8 +22,10 @@ public class Server implements Runnable{
         try{
             server = new ServerSocket(hostSocket); //tworzenie serwera
             System.out.println("Serwer dziala na socketcie: " + hostSocket);
+            threadPool = Executors.newCachedThreadPool();
             while (isRunning) {
                 Socket newClient = server.accept(); //dodanie uzytkownika do serwera?
+                System.out.println("ktoś się dostał");
                 clientHandler threadHandler = new clientHandler(newClient);
                 clients.add(threadHandler);
                 threadPool.execute(threadHandler);
@@ -58,7 +61,6 @@ public class Server implements Runnable{
         private Socket newClient;
         private BufferedReader reader;
         private PrintWriter writer;
-        private ExecutorService pool;
         public clientHandler(Socket newClient){
             this.newClient = newClient;
         }
@@ -67,9 +69,10 @@ public class Server implements Runnable{
             try{
                 writer = new PrintWriter(newClient.getOutputStream(), true); //dodanie możliwości wysyłania czegoś do klienta
                 reader = new BufferedReader(new InputStreamReader(newClient.getInputStream()));
+                String message = "Podaj wiadomość: ";
                 while (true){
-                    writer.println("Podaj wiadomość: ");
-                    String message = reader.readLine();
+                    writer.println(message);
+                    message = reader.readLine();
                     System.out.println(message);
                     if(message.startsWith("quit")){
                         stopClient();
