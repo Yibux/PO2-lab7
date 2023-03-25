@@ -1,6 +1,16 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.Clock;
+import java.time.DateTimeException;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -24,8 +34,8 @@ public class Server implements Runnable{
             System.out.println("Serwer dziala na socketcie: " + hostSocket);
             threadPool = Executors.newCachedThreadPool();
             while (isRunning) {
-                Socket newClient = server.accept(); //dodanie uzytkownika do serwera?
-                System.out.println("ktoś się dostał");
+                Socket newClient = server.accept(); //dodanie uzytkownika do serwera
+                System.out.println("Dolączył: " + newClient.getInetAddress());
                 clientHandler threadHandler = new clientHandler(newClient);
                 clients.add(threadHandler);
                 threadPool.execute(threadHandler);
@@ -58,27 +68,49 @@ public class Server implements Runnable{
     }
 
     class clientHandler implements Runnable{
-        private Socket newClient;
-        private BufferedReader reader;
-        private PrintWriter writer;
+        LinkedList<Notification> notifications;
+        private final Socket newClient;
+        private PrintWriter out;
+        private BufferedReader in;
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+
         public clientHandler(Socket newClient){
             this.newClient = newClient;
         }
         @Override
         public void run(){
             try{
-                writer = new PrintWriter(newClient.getOutputStream(), true); //dodanie możliwości wysyłania czegoś do klienta
-                reader = new BufferedReader(new InputStreamReader(newClient.getInputStream()));
-                String message = "Podaj wiadomość: ";
+                out = new PrintWriter(new OutputStreamWriter(newClient.getOutputStream()), true); //dodanie możliwości wysyłania wiadomości do klienta
+                in = new BufferedReader(new InputStreamReader(newClient.getInputStream()));
+                notifications = new LinkedList<>();
+                out.println("Witaj. Podążaj zgodnie z poleceniami lub wpisz quit jeśli chcesz opuścić czat. ");
                 while (true){
-                    writer.println(message);
-                    message = reader.readLine();
-                    System.out.println(message);
-                    if(message.startsWith("quit")){
-                        stopClient();
+                    out.println("Podaj wiadomość: ");
+                    String message = in.readLine();
+                    if(message.equals("quit"))
                         break;
+                    while(true){
+                        LocalTime currentTime = LocalTime.now().withNano(0);
+                        out.println("Podaj godzinę notyfikacji późniejszą niż "+ currentTime +" w formacie hh:mm:ss : ");
+                        String formattedTime = in.readLine();
+                        LocalTime time;
+                        try{
+                            time = LocalTime.parse(formattedTime);
+                            Duration duration = Duration.between(currentTime,time);
+                            long msDiff = duration.toSeconds();
+                            if(msDiff<0){
+                                throw new UjemnyCzasException();
+                            }
+                            out.println("Poprawana data!");
+                            System.out.println(message+" "+time);
+                            System.out.println("Różnica czasów: "+ msDiff);
+                            break;
+                        } catch (DateTimeException e){
+                            out.println("Podano niepoprawny format godziny!");
+                        } catch (UjemnyCzasException e){
+                            out.println(e.getMessage());
+                        }
                     }
-                    broadcast("HEJ!!!");
                 }
 
             } catch (IOException e){
@@ -87,20 +119,27 @@ public class Server implements Runnable{
         }
 
         public void sendMessage(String message){
-            writer.println(message);
+            out.println(message);
         }
+
 
         public void stopClient() {
 
             if(!newClient.isClosed()){
                 try {
-                    reader.close();
-                    writer.close();
+                    out.close();
+                    in.close();
                     newClient.close();
                 } catch (IOException e) {
                     //ignore
                 }
             }
+        }
+    }
+
+    class Notification{
+        public Notification(String message, long delay){
+
         }
     }
 
