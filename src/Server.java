@@ -12,6 +12,7 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
+import java.util.Scanner;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,6 +34,9 @@ public class Server implements Runnable{
             server = new ServerSocket(hostSocket); //tworzenie serwera
             System.out.println("Serwer dziala na socketcie: " + hostSocket);
             threadPool = Executors.newCachedThreadPool();
+            Scanner scanner = new Scanner(System.in);
+            Thread getter = new Thread(new Stopper(scanner));
+            getter.start();
             while (isRunning) {
                 Socket newClient = server.accept(); //dodanie uzytkownika do serwera
                 System.out.println("Dolączył: " + newClient.getInetAddress().getHostName());
@@ -60,6 +64,23 @@ public class Server implements Runnable{
         }
     }
 
+    class Stopper extends Thread{
+        Scanner scanner;
+        Stopper(Scanner scanner) {
+            this.scanner = scanner;
+        }
+        @Override
+        public void run(){
+            while(true) {
+                String stop = scanner.nextLine();
+                if(stop.equals("quit")) {
+                    stopServer();
+                    break;
+                }
+            }
+        }
+    }
+
     class clientHandler implements Runnable{
         LinkedList<Notification> notifications;
         private final Socket newClient;
@@ -83,6 +104,7 @@ public class Server implements Runnable{
                     String message = in.readLine();
                     if(message == null || message.equals("quit"))
                         break;
+                    System.out.println(message);
                     long msDiff = 0;
                     LocalTime currentTime = LocalTime.now().withNano(0);
                     out.println("Podaj godzinę notyfikacji późniejszą niż "+ currentTime +" w formacie hh:mm:ss : ");
@@ -108,6 +130,7 @@ public class Server implements Runnable{
                     }
                     threadPool.execute(new Notification(message, out, time));
                 }
+                stopClient();
 
             } catch (IOException e){
                 stopClient();
@@ -121,7 +144,7 @@ public class Server implements Runnable{
                     out.close();
                     in.close();
                     newClient.close();
-                    threadPool.close();
+                    threadPool.shutdown();
                     System.out.println("Uczestnik opuścił czat");
                 } catch (IOException e) {
                     //ignore

@@ -1,4 +1,5 @@
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -13,14 +14,11 @@ public class Client implements Runnable{
     private Socket client;
     private BufferedReader in;
     private PrintWriter out;
-    SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
     boolean isRunning;
-    public int a;
     public String processMessage="";
 
     public Client() {
         isRunning = true;
-        a = 4;
     }
     @Override
     public void run() {
@@ -40,24 +38,35 @@ public class Client implements Runnable{
         getter.start();
 
         try {
-            while (isRunning) {
-                inMessage = in.readLine();
-                if(inMessage == null)
-                    break;
-                System.out.println(inMessage);
+
+            while (isRunning && !processMessage.equals("quit")) {
+                try{
+                    //client.setSoTimeout(1000);
+                    inMessage = in.readLine();
+                    if(inMessage == null || inMessage.equals("quit")) {
+                        break;
+                    }
+                    System.out.println(inMessage);
+                }catch (SocketTimeoutException e) {
+                    System.out.println("Host nie dziala");
+                    stopClient();
+                    System.exit(0);
+                }
             }
-            System.out.println("koniec pętli");
+            } catch (IOException e) {
+                System.out.println("Nie udało się połączyć z hostem!");
+                System.exit(1);
+            } finally {
+            //getter.interrupt();
+            stopClient();
         }
-            catch (IOException e) {
-//                System.out.println("Nie udało się połączyć z hostem!");
-//                System.exit(1);
-            }
-        }
+    }
 
 
     public void stopClient() {
         isRunning = false;
         try {
+
             in.close();
             out.close();
             if(!client.isClosed()) {
@@ -82,7 +91,8 @@ public class Client implements Runnable{
                 processMessage = scanner.nextLine();
                 out.println(processMessage);
                 if(processMessage.equals("quit")) {
-                    stopClient();
+                    isRunning = false;
+                    break;
                 }
             }
         }
