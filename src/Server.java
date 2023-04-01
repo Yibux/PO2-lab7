@@ -35,7 +35,7 @@ public class Server implements Runnable{
             threadPool = Executors.newCachedThreadPool();
             while (isRunning) {
                 Socket newClient = server.accept(); //dodanie uzytkownika do serwera
-                System.out.println("Dolączył: " + newClient.getInetAddress());
+                System.out.println("Dolączył: " + newClient.getInetAddress().getHostName());
                 clientHandler threadHandler = new clientHandler(newClient);
                 clients.add(threadHandler);
                 threadPool.execute(threadHandler);
@@ -43,13 +43,6 @@ public class Server implements Runnable{
 
         } catch (IOException e){
             stopServer();
-        }
-    }
-    public void broadcast(String message) {
-        for (clientHandler ch : clients){
-            if(ch != null){
-                ch.sendMessage(message);
-            }
         }
     }
 
@@ -72,9 +65,10 @@ public class Server implements Runnable{
         private final Socket newClient;
         private PrintWriter out;
         private BufferedReader in;
-        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+        private final ExecutorService threadPool;
 
         public clientHandler(Socket newClient){
+            threadPool = Executors.newCachedThreadPool();
             this.newClient = newClient;
         }
         @Override
@@ -87,41 +81,38 @@ public class Server implements Runnable{
                 while (true){
                     out.println("Podaj wiadomość: ");
                     String message = in.readLine();
-                    if(message.equals("quit"))
+                    if(message == null || message.equals("quit"))
                         break;
-                    while(true){
-                        LocalTime currentTime = LocalTime.now().withNano(0);
-                        out.println("Podaj godzinę notyfikacji późniejszą niż "+ currentTime +" w formacie hh:mm:ss : ");
-                        String formattedTime = in.readLine();
-                        LocalTime time;
-                        try{
-                            time = LocalTime.parse(formattedTime);
-                            Duration duration = Duration.between(currentTime,time);
-                            long msDiff = duration.toSeconds();
-                            if(msDiff<0){
-                                throw new UjemnyCzasException();
-                            }
-                            out.println("Poprawana data!");
-                            System.out.println(message+" "+time);
-                            System.out.println("Różnica czasów: "+ msDiff);
-                            break;
-                        } catch (DateTimeException e){
-                            out.println("Podano niepoprawny format godziny!");
-                        } catch (UjemnyCzasException e){
-                            out.println(e.getMessage());
+                    long msDiff = 0;
+                    LocalTime currentTime = LocalTime.now().withNano(0);
+                    out.println("Podaj godzinę notyfikacji późniejszą niż "+ currentTime +" w formacie hh:mm:ss : ");
+                    String formattedTime = in.readLine();
+                    LocalTime time;
+                    try{
+                        time = LocalTime.parse(formattedTime);
+                        Duration duration = Duration.between(currentTime,time);
+                        msDiff = duration.toSeconds();
+                        if(msDiff<0){
+                            throw new UjemnyCzasException();
                         }
+                        out.println("Poprawana data!");
+                        System.out.println(message+" "+time);
+                        System.out.println("Różnica czasów: "+ msDiff);
+
+                    } catch (DateTimeException e){
+                        out.println("Podano niepoprawny format godziny!");
+                        continue;
+                    } catch (UjemnyCzasException e){
+                        out.println(e.getMessage());
+                        continue;
                     }
+                    threadPool.execute(new Notification(message, out, time));
                 }
 
             } catch (IOException e){
                 stopClient();
             }
         }
-
-        public void sendMessage(String message){
-            out.println(message);
-        }
-
 
         public void stopClient() {
 
@@ -130,6 +121,8 @@ public class Server implements Runnable{
                     out.close();
                     in.close();
                     newClient.close();
+                    threadPool.close();
+                    System.out.println("Uczestnik opuścił czat");
                 } catch (IOException e) {
                     //ignore
                 }
@@ -137,9 +130,28 @@ public class Server implements Runnable{
         }
     }
 
-    class Notification{
-        public Notification(String message, long delay){
+    class Notification implements Runnable{
+        String message;
+        LocalTime time;
+        PrintWriter out;
 
+        public Notification(String message, PrintWriter out, LocalTime time){
+            this.out = out;
+            this.message = message;
+            this.time = time;
+        }
+
+        @Override
+        public void run(){
+            while(true) {
+                Duration duration = Duration.between(LocalTime.now().withNano(0),time);
+                double msDiff = duration.toSeconds();
+                if(msDiff <= 0)
+                    break;
+            }
+            out.println("Przypomnienie o czasie " + time + " z wiadomością: " + message);
+            System.out.println("Przypomnienie z wiadomością: " + message);
+            System.out.println("Wysłano o czasie: " + LocalTime.now().withNano(0));
         }
     }
 
